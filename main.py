@@ -4,6 +4,7 @@ import json
 import os
 import argparse
 import time
+import urllib.error
 
 from requests_oauthlib import OAuth1Session
 
@@ -30,6 +31,8 @@ try:
 except Exception:
     raise
 
+img_dir = './images/'
+
 class TwitterAPI:
     def __init__(self, search_word):
         print('Collect "{}"'.format(search_word))
@@ -48,7 +51,7 @@ class TwitterAPI:
         self._params = {
             'q'               : search_word,
             'count'           : 100,          # 取得するtweet数
-            'result_type'     : 'recent',
+            'result_type'     : 'mixed',
             'max_id'        : self._max_id
         }
 
@@ -69,6 +72,31 @@ class TwitterAPI:
         response = self._twitter_api.get(self._RATE_LIMIT_STATUS_URL, params=params, timeout=1)
         return json.loads(response.text)["resources"]["users"]["/users/search"]
 
+    def image_download(self, url):
+        """画像のダウンロード
+        """
+        url_orig = '%s:orig' % url
+        path = img_dir + url.split('/')[-1]
+        try:
+            response = urllib.request.urlopen(url=url_orig)
+            with open(path, "wb") as f:
+                f.write(response.read())
+        except Exception as e:
+            self.error_catch(e)
+
+    def download(self,resp_body):
+        for result in resp_body["statuses"]:
+            #print("************")
+            #print(result)
+            if 'extended_entities' not in result:
+                continue
+            if 'media' not in result['extended_entities']:
+                continue
+            for media in result['extended_entities']['media']:
+                url = media['media_url_https']
+                #print("***************")
+                #print(url)
+                self.image_download(url)
 
     def get_tweet(self):
         while True:
@@ -89,14 +117,13 @@ class TwitterAPI:
                     self._tweet_cnt += resp_cnt
                     print("count:{0}, total:{1} ".format(resp_cnt, self._tweet_cnt))
 
-                    #print(resp_body)
                     # 収集したうちで最も小さいid-1を、次の収集のmax_idにする
                     self._params['max_id'] = resp_body['statuses'][-1]["id"] - 1
 
                     # 収集したツイートをDBに追加
                     #print("*******************")
-                    #print(response)
-                    #TODO
+                    #print(resp_body)
+                    self.download(resp_body)
 
                 # 異常終了
                 else:
@@ -135,3 +162,5 @@ def test():
 if __name__ == "__main__":
     #main()
     test()
+
+
